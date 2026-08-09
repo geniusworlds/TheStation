@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TheStation | ذا ستيشن - منصة وأدوات صُنّاع المحتوى</title>
+    <!-- Google Fonts for Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Sidebar Navigation (Desktop) -->
+        <aside class="sidebar" id="app-sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="brand-logo">🎙️</div>
+                    <div class="brand-text">
+                        <h1 class="brand-name">TheStation</h1>
+                        <span class="brand-tagline">ذا ستيشن • صُنّاع المحتوى</span>
+                    </div>
+                </div>
+                <button class="btn-icon mobile-only" id="mobile-drawer-close">×</button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-link active" data-tab="dashboard">
+                    <span class="nav-icon">🏠</span>
+                    <span class="nav-text">الرئيسية</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="scripts">
+                    <span class="nav-icon">📝</span>
+                    <span class="nav-text">السكربتات</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="youtube">
+                    <span class="nav-icon">🎬</span>
+                    <span class="nav-text">مقاطع يوتيوب</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="images">
+                    <span class="nav-icon">🖼️</span>
+                    <span class="nav-text">بحث الصور</span>
+                </a>
+                <a href="#" class="nav-link" data-tab="tts">
+                    <span class="nav-icon">🎙️</span>
+                    <span class="nav-text">تحويل النص إلى صوت</span>
+                </a>
+                <div class="nav-divider"></div>
+                <a href="#" class="nav-link" data-tab="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span class="nav-text">الإعدادات</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="system-status">
+                    <span class="status-indicator"></span>
+                    <span class="status-text">النظام متصل • V1.0</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Sidebar Backdrop for Mobile -->
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+        <!-- Main Workspace Area -->
+        <main class="main-workspace">
+            <!-- Mobile Top Header -->
+            <header class="mobile-header">
+                <button class="btn-icon" id="mobile-drawer-toggle">☰</button>
+                <div class="mobile-brand">🎙️ TheStation</div>
+                <div style="width: 24px;"></div>
+            </header>
+
+            <div class="workspace-content">
+                <!-- VIEW 1: DASHBOARD (الرئيسية) -->
+                <section class="view-section" id="view-dashboard" style="display: block;">
+                    <div class="page-header">
+                        <div>
+                            <h2 class="page-title">مرحباً بك في ذا ستيشن 👋</h2>
+                            <p class="page-subtitle">لوحة تحكم وإدارة المحتوى الإعلامي والسكربتات الخاص بك.</p>
+                        </div>
+                    </div>
+
+                    <!-- Statistics Cards Grid -->
+                    <div class="stats-grid">
+                        <div class="stat-card card" data-filter="ALL">
+                            <div class="stat-header">
+                                <span class="stat-label">إجمالي السكربتات</span>
+                                <span class="stat-icon">📄</span>
+                            </div>
+                            <div class="stat-value" id="dash-stat-total">0</div>
+                            <span class="stat-sub">عرض كافة السكربتات</span>
+                        </div>
+
+                        <div class="stat-card card stat-written" data-filter="WRITTEN">
+                            <div class="stat-header">
+                                <span class="stat-label">سكربت مكتوب</span>
+                                <span class="badge badge-written">🟡 مكتوب</span>
+                            </div>
+                            <div class="stat-value" id="dash-stat-written">0</div>
+                            <span class="stat-sub">تحت الكتابة والتنقيح</span>
+                        </div>
+
+                        <div class="stat-card card stat-ready" data-filter="READY">
+                            <div class="stat-header">
+                                <span class="stat-label">سكربت جاهز</span>
+                                <span class="badge badge-ready">🟢 جاهز</span>
+                            </div>
+                            <div class="stat-value" id="dash-stat-ready">0</div>
+                            <span class="stat-sub">جاهز للترجيل والإنتاج</span>
+                        </div>
+
+                        <div class="stat-card card stat-cancelled" data-filter="CANCELLED">
+                            <div class="stat-header">
+                                <span class="stat-label">سكربت ملغي</span>
+                                <span class="badge badge-cancelled">🔴 ملغي</span>
+                            </div>
+                            <div class="stat-value" id="dash-stat-cancelled">0</div>
+                            <span class="stat-sub">ملغاة أو مستبعدة</span>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard Layout Columns -->
+                    <div class="dashboard-columns">
+                        <!-- Recent Scripts Column -->
+                        <div class="dashboard-main-col">
+                            <div class="section-card card">
+                                <div class="section-card-header">
+                                    <h3>📝 أحدث السكربتات المعدلة</h3>
+                                    <button class="btn btn-sm btn-secondary" onclick="window.app.switchTab('scripts')">عرض الكل ←</button>
+                                </div>
+                                <div class="recent-scripts-list" id="dash-recent-scripts">
+                                    <div class="loading-spinner-container"><div class="spinner"></div></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sidebar Actions & Recent Searches Column -->
+                        <div class="dashboard-side-col">
+                            <!-- Quick Actions -->
+                            <div class="section-card card">
+                                <h3>⚡ إجراءات سريعة</h3>
+                                <div class="quick-actions-list">
+                                    <button class="btn btn-primary btn-block" id="quick-action-new-script">
+                                        + إنشاء سكربت جديد
+                                    </button>
+                                    <button class="btn btn-secondary btn-block" id="quick-action-yt">
+                                        🎬 البحث في يوتيوب
+                                    </button>
+                                    <button class="btn btn-secondary btn-block" id="quick-action-img">
+                                        🖼️ البحث عن صورة
+                                    </button>
+                                    <button class="btn btn-secondary btn-block" id="quick-action-tts">
+                                        🎙️ تحويل النص إلى صوت
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Recent Searches -->
+                            <div class="section-card card">
+                                <h3>🔍 عمليات البحث الأخيرة</h3>
+                                <div class="recent-searches-block">
+                                    <div class="recent-search-group">
+                                        <h5>🎬 يوتيوب</h5>
+                                        <div id="dash-recent-yt" class="recent-tags-container"></div>
+                                    </div>
+                                    <div class="recent-search-group">
+                                        <h5>🖼️ الصور</h5>
+                                        <div id="dash-recent-img" class="recent-tags-container"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 2: SCRIPTS (السكربتات) -->
+                <section class="view-section" id="view-scripts" style="display: none;">
+                    <!-- LIST VIEW -->
+                    <div id="scripts-list-view">
+                        <div class="page-header flex-between">
+                            <div>
+                                <h2 class="page-title">📝 إدارة السكربتات والملاحظات</h2>
+                                <p class="page-subtitle">إنشاء، تعديل وتنظيم سكربتات المقاطع والفيديوهات.</p>
+                            </div>
+                            <button class="btn btn-primary" id="create-script-btn">+ إنشاء سكربت جديد</button>
+                        </div>
+
+                        <!-- Filters & Search Bar -->
+                        <div class="filter-search-bar card">
+                            <div class="filter-tabs">
+                                <button class="script-filter-btn active" data-filter="ALL">
+                                    الكل <span class="filter-count" id="count-all">0</span>
+                                </button>
+                                <button class="script-filter-btn" data-filter="WRITTEN">
+                                    🟡 مكتوب <span class="filter-count" id="count-written">0</span>
+                                </button>
+                                <button class="script-filter-btn" data-filter="READY">
+                                    🟢 جاهز <span class="filter-count" id="count-ready">0</span>
+                                </button>
+                                <button class="script-filter-btn" data-filter="CANCELLED">
+                                    🔴 ملغي <span class="filter-count" id="count-cancelled">0</span>
+                                </button>
+                            </div>
+                            <div class="search-input-wrapper">
+                                <input type="text" id="script-search-input" class="form-control" placeholder="ابحث في عناوين ومحتوى السكربتات..." />
+                            </div>
+                        </div>
+
+                        <!-- Scripts Cards Container -->
+                        <div class="scripts-grid" id="scripts-list-container">
+                            <div class="loading-spinner-container"><div class="spinner"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- EDITOR VIEW -->
+                    <div id="script-editor-view" style="display: none;">
+                        <div class="editor-header flex-between">
+                            <button class="btn btn-secondary" onclick="window.scriptManager.closeEditor()">
+                                ← العودة للسكربتات
+                            </button>
+
+                            <div class="editor-header-actions">
+                                <span class="autosave-status" id="autosave-indicator">تم الحفظ تلقائياً ✓</span>
+                                <span id="editor-status-badge" class="badge badge-written">🟡 مكتوب</span>
+                                <button class="btn btn-secondary btn-sm" onclick="window.scriptManager.copyCurrentScriptText()">
+                                    📋 نسخ النص
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="editor-card card">
+                            <!-- Title & Status Selector -->
+                            <div class="editor-meta-row">
+                                <input type="text" id="editor-title-input" class="editor-title-field" placeholder="عنوان السكربت هنا..." />
+                                <div class="status-select-wrapper">
+                                    <label for="editor-status-select" class="form-label">حالة السكربت:</label>
+                                    <select id="editor-status-select" class="form-control">
+                                        <option value="WRITTEN">🟡 سكربت مكتوب</option>
+                                        <option value="READY">🟢 سكربت جاهز</option>
+                                        <option value="CANCELLED">🔴 سكربت ملغي</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Rich Text Formatting Toolbar -->
+                            <div class="editor-toolbar">
+                                <select class="editor-toolbar-btn toolbar-select" data-cmd="formatBlock" data-val="h2">
+                                    <option value="p">فقرة عادية</option>
+                                    <option value="h1">عنوان رئيسي (H1)</option>
+                                    <option value="h2">عنوان فرعي (H2)</option>
+                                    <option value="h3">عنوان فرعي ثانٍ (H3)</option>
+                                </select>
+                                <div class="toolbar-divider"></div>
+                                <button class="editor-toolbar-btn" data-cmd="bold" title="غامق (Bold)"><b>B</b></button>
+                                <button class="editor-toolbar-btn" data-cmd="italic" title="مائل (Italic)"><i>I</i></button>
+                                <button class="editor-toolbar-btn" data-cmd="underline" title="تحته خط (Underline)"><u>U</u></button>
+                                <button class="editor-toolbar-btn" data-cmd="strikeThrough" title="مشطوب"><s>S</s></button>
+                                <div class="toolbar-divider"></div>
+                                <button class="editor-toolbar-btn" data-cmd="insertUnorderedList" title="قائمة نقطية">• قائمة</button>
+                                <button class="editor-toolbar-btn" data-cmd="insertOrderedList" title="قائمة رقمية">1. قائمة</button>
+                                <div class="toolbar-divider"></div>
+                                <button class="editor-toolbar-btn" data-cmd="justifyRight" title="محاذاة لليمين">➡️</button>
+                                <button class="editor-toolbar-btn" data-cmd="justifyCenter" title="محاذاة للوسط">↔️</button>
+                                <button class="editor-toolbar-btn" data-cmd="justifyLeft" title="محاذاة لليسار">⬅️</button>
+                                <div class="toolbar-divider"></div>
+                                <button class="editor-toolbar-btn" data-cmd="insertTatweel" title="إضافة مدّ تطويل عربي (ـ)">ـ تطويل</button>
+                                <button class="editor-toolbar-btn" data-cmd="undo" title="تراجع">↩️</button>
+                                <button class="editor-toolbar-btn" data-cmd="redo" title="إعادة">↪️</button>
+                            </div>
+
+                            <!-- Editable Content Area -->
+                            <div id="editor-content-area" class="editor-content" contenteditable="true" dir="rtl"></div>
+
+                            <!-- Word & Character Count Bar -->
+                            <div class="editor-stats-bar">
+                                <span id="editor-char-count">0 حرف</span>
+                                <span class="stat-dot">•</span>
+                                <span id="editor-word-count">0 كلمة</span>
+                                <span class="stat-dot">•</span>
+                                <span id="editor-read-time">~ 0 دقيقة قراءة</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 3: YOUTUBE (مقاطع يوتيوب) -->
+                <section class="view-section" id="view-youtube" style="display: none;">
+                    <!-- YOUTUBE SEARCH VIEW -->
+                    <div id="yt-search-view">
+                        <div class="page-header">
+                            <h2 class="page-title">🎬 البحث وتفريغ مقاطع يوتيوب</h2>
+                            <p class="page-subtitle">ابحث عن مقاطع يوتيوب، اختر الفيديو، وحدد أجزاء ومقاطع محددة بدقة.</p>
+                        </div>
+
+                        <!-- Search Box -->
+                        <div class="search-hero-card card">
+                            <div class="search-hero-input-row">
+                                <input type="text" id="yt-search-input" class="form-control form-control-lg" placeholder="ابحث عن فيديو في يوتيوب..." />
+                                <button class="btn btn-primary btn-lg" id="yt-search-btn">🔍 بحث</button>
+                            </div>
+                            <div id="yt-recent-searches" class="recent-searches-tags-row"></div>
+                        </div>
+
+                        <!-- Search Results Grid -->
+                        <div id="yt-results-container" class="yt-results-area">
+                            <div class="empty-state card">
+                                <div class="empty-icon">🎬</div>
+                                <h3>ابدأ بالبحث عن فيديو</h3>
+                                <p>أدخل الكلمات المفتاحية في مربع البحث أعلاه لعرض مقاطع يوتيوب المتاحة.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- YOUTUBE WORKSPACE VIEW -->
+                    <div id="yt-workspace-view" style="display: none;">
+                        <div class="page-header flex-between">
+                            <button class="btn btn-secondary" onclick="window.youtubeTool.closeWorkspace()">
+                                ← العودة لنتائج البحث
+                            </button>
+                            <span class="badge badge-primary">مساحة عمل الفيديو</span>
+                        </div>
+
+                        <div class="yt-workspace-layout">
+                            <!-- Player Column -->
+                            <div class="yt-player-col">
+                                <div class="card player-card-wrapper">
+                                    <div id="yt-iframe-container" class="yt-iframe-aspect"></div>
+                                    <div class="yt-workspace-info">
+                                        <h3 id="yt-workspace-title">عنوان الفيديو</h3>
+                                        <p id="yt-workspace-channel" class="text-muted">اسم القناة</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tools Column (Section Selection & Export) -->
+                            <div class="yt-tools-col">
+                                <div class="card section-picker-card">
+                                    <h3>⏱️ تحديد الجزء والمقطع</h3>
+                                    <p class="text-sub">حدد وقت البداية والنهاية للفقرة المطلوبة من الفيديو:</p>
+
+                                    <div class="time-inputs-grid">
+                                        <div class="form-group">
+                                            <label class="form-label">وقت البداية:</label>
+                                            <input type="text" id="yt-start-time-input" class="form-control" value="00:00:00" />
+                                            <button class="btn btn-sm btn-secondary btn-block mt-2" id="yt-set-start-btn">
+                                                ⏱️ البداية من الوقت الحالي
+                                            </button>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label class="form-label">وقت النهاية:</label>
+                                            <input type="text" id="yt-end-time-input" class="form-control" value="00:00:00" />
+                                            <button class="btn btn-sm btn-secondary btn-block mt-2" id="yt-set-end-btn">
+                                                ⏱️ النهاية من الوقت الحالي
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="duration-display-box">
+                                        <span>مدة الجزء المحدد:</span>
+                                        <strong id="yt-section-duration">00:00</strong>
+                                    </div>
+
+                                    <div class="section-action-btns">
+                                        <button class="btn btn-primary btn-block" id="yt-preview-section-btn">
+                                            ▶ معاينة الجزء المحدد
+                                        </button>
+                                        <button class="btn btn-secondary btn-block" id="yt-reset-section-btn">
+                                            🔄 إعادة ضبط
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="card export-info-card mt-3">
+                                    <h3>ℹ️ تصدير ومشاركة المقطع</h3>
+                                    <p class="text-sub">رابط التوقيت المباشر للفقرة المحددة:</p>
+                                    <a id="yt-timestamp-link" href="#" target="_blank" class="yt-share-link">
+                                        https://youtu.be/...
+                                    </a>
+                                    <div class="legal-notice">
+                                        🔒 التطبيق يلتزم بشروط خدمة منصة يوتيوب.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 4: IMAGES (بحث الصور) -->
+                <section class="view-section" id="view-images" style="display: none;">
+                    <div class="page-header">
+                        <h2 class="page-title">🖼️ بحث ومعاينة الصور عالية الدقة</h2>
+                        <p class="page-subtitle">استكشف وابحث عن الصور الخالية من حقوق الملكية والمصادر المفتوحة للاستخدام في تصاميمك.</p>
+                    </div>
+
+                    <!-- Search Box -->
+                    <div class="search-hero-card card">
+                        <div class="search-hero-input-row">
+                            <input type="text" id="img-search-input" class="form-control form-control-lg" placeholder="ابحث عن صورة (مثال: Real Madrid, Gaming setup)..." />
+                            <button class="btn btn-primary btn-lg" id="img-search-btn">🖼️ بحث عن صور</button>
+                        </div>
+                        <div id="img-recent-searches" class="recent-searches-tags-row"></div>
+                    </div>
+
+                    <!-- Results Masonry Container -->
+                    <div id="img-results-container" class="img-results-area">
+                        <div class="empty-state card">
+                            <div class="empty-icon">🖼️</div>
+                            <h3>ابحث عن صورة للبدء</h3>
+                            <p>أدخل موضوع البحث للحصول على صور عالية الدقة من مصادر معتمدة.</p>
+                        </div>
+                    </div>
+
+                    <!-- IMAGE PREVIEW MODAL -->
+                    <div class="modal-backdrop" id="img-preview-modal" style="display: none;">
+                        <div class="modal-content modal-lg card">
+                            <button class="modal-close-btn" id="img-modal-close">×</button>
+                            <div class="img-preview-modal-body">
+                                <div class="img-modal-full-wrapper">
+                                    <img id="img-modal-full" src="" alt="صورة مكبرة" />
+                                </div>
+                                <div class="img-modal-details">
+                                    <h3 id="img-modal-title">عنوان الصورة</h3>
+                                    <p id="img-modal-source" class="text-muted">المصدر</p>
+                                    <p id="img-modal-dims" class="text-muted">الأبعاد</p>
+                                    <div class="img-modal-actions">
+                                        <button class="btn btn-primary" onclick="window.imageSearchTool.downloadCurrentImage()">
+                                            ⬇️ تحميل الصورة
+                                        </button>
+                                        <a id="img-modal-source-link" href="#" target="_blank" class="btn btn-secondary">
+                                            🔗 فتح المصدر
+                                        </a>
+                                        <button class="btn btn-secondary" onclick="window.imageSearchTool.copyImageLink()">
+                                            📋 نسخ رابط الصورة
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 5: TEXT TO SPEECH (تحويل النص إلى صوت - 🎙️) -->
+                <section class="view-section" id="view-tts" style="display: none;">
+                    <div class="page-header">
+                        <h2 class="page-title">🎙️ تحويل النص إلى صوت - اللهجة السعودية</h2>
+                        <p class="page-subtitle">حويل النصوص العربية والسكربتات إلى قراءة صوتية طبيعية باللكنة السعودية والعربية.</p>
+                    </div>
+
+                    <div class="tts-grid-layout">
+                        <!-- Left Editor Column -->
+                        <div class="tts-editor-col">
+                            <div class="card tts-editor-card">
+                                <div class="tts-editor-header flex-between">
+                                    <h3>النص المراد تحويله</h3>
+                                    <div class="tts-editor-actions">
+                                        <button class="btn btn-sm btn-secondary" id="tts-paste-btn">📋 لصق</button>
+                                        <button class="btn btn-sm btn-secondary" id="tts-clear-btn">🧹 مسح</button>
+                                    </div>
+                                </div>
+
+                                <textarea id="tts-text-input" class="form-control tts-textarea" rows="8" placeholder="اكتب النص الذي تريد تحويله إلى صوت باللكنة السعودية هنا..."></textarea>
+
+                                <div class="tts-stats-row flex-between">
+                                    <span id="tts-char-count">0 / 2000 حرف</span>
+                                    <span id="tts-word-count">0 كلمة</span>
+                                </div>
+                            </div>
+
+                            <!-- Audio Player Status Card -->
+                            <div class="card tts-player-card mt-3" id="tts-player-card" style="display: none;">
+                                <h3>🔊 مشغل الصوت</h3>
+                                <p id="tts-player-status" class="text-sub">جاهز للتشغيل</p>
+
+                                <div class="audio-waveform-container" id="tts-waveform">
+                                    <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+                                    <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+                                </div>
+
+                                <div class="player-controls-row mt-3">
+                                    <button class="btn btn-danger" id="tts-stop-btn">⏹ إيقاف القراءة</button>
+                                    <button class="btn btn-secondary" id="tts-link-script-btn">🎙️ ربط التعليق الصوتي بسكربت</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Control Column -->
+                        <div class="tts-controls-col">
+                            <div class="card tts-settings-card">
+                                <h3>⚙️ إعدادات الصوت واللكنة</h3>
+
+                                <div class="form-group mt-3">
+                                    <label class="form-label">🇸🇦 الصوت واللكنة:</label>
+                                    <select id="tts-voice-select" class="form-control">
+                                        <option value="default">🇸🇦 صوت سعودي (نجدي / حجازي)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group mt-3">
+                                    <label class="form-label">⚡ سرعة القراءة:</label>
+                                    <select id="tts-speed-select" class="form-control">
+                                        <option value="0.75">بطيء (0.75x)</option>
+                                        <option value="1.0" selected>طبيعي (1.0x)</option>
+                                        <option value="1.25">سريع (1.25x)</option>
+                                        <option value="1.5">سريع جداً (1.5x)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group mt-3">
+                                    <label class="form-label">🎵 نبرة الصوت (Pitch):</label>
+                                    <select id="tts-pitch-select" class="form-control">
+                                        <option value="0.9">عميق (Deep)</option>
+                                        <option value="1.0" selected>طبيعي (Normal)</option>
+                                        <option value="1.1">مرتفع (High)</option>
+                                    </select>
+                                </div>
+
+                                <button class="btn btn-primary btn-lg btn-block mt-4" id="tts-generate-btn">
+                                    🎙️ إنشاء الصوت
+                                </button>
+                            </div>
+
+                            <!-- TTS History -->
+                            <div class="card tts-history-card-wrapper mt-3">
+                                <h3>📜 سجل التحويلات الصوتية</h3>
+                                <div id="tts-history-container" class="tts-history-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW 6: SETTINGS (الإعدادات) -->
+                <section class="view-section" id="view-settings" style="display: none;">
+                    <div class="page-header">
+                        <h2 class="page-title">⚙️ إعدادات التطبيق والنسخ الاحتياطي</h2>
+                        <p class="page-subtitle">إدارة مفاتيح API، تصدير واستيراد البيانات والنسخ الاحتياطية.</p>
+                    </div>
+
+                    <div class="settings-grid">
+                        <!-- API Keys Section -->
+                        <div class="card settings-card">
+                            <h3>🔑 مفاتيح البرمجة (API Keys)</h3>
+                            <p class="text-sub">أدخل مفاتيح API الاختيارية لتحسين وتوسيع نتائج البحث والتسجيل:</p>
+
+                            <div class="form-group mt-3">
+                                <label class="form-label">مفتاح Google YouTube Data API Key:</label>
+                                <input type="password" id="setting-yt-key" class="form-control" placeholder="AIzaSy..." />
+                                <span class="help-text">اختياري: يزيد من حدود ودقة نتائج البحث في يوتيوب.</span>
+                            </div>
+
+                            <div class="form-group mt-3">
+                                <label class="form-label">مفتاح Pexels / Unsplash Image Key:</label>
+                                <input type="password" id="setting-img-key" class="form-control" placeholder="أدخل مفتاح الصور..." />
+                                <span class="help-text">اختياري: يفتح البحث المباشر في مكتبات الصور الاحترافية.</span>
+                            </div>
+
+                            <button class="btn btn-primary mt-4" id="save-api-keys-btn">حفظ مفاتيح API</button>
+                        </div>
+
+                        <!-- Data Backup Section -->
+                        <div class="card settings-card">
+                            <h3>💾 النسخ الاحتياطي وإدارة البيانات</h3>
+                            <p class="text-sub">احفظ نسخة من جميع السكربتات وسجل البحث المحلي واسترجعها في أي وقت:</p>
+
+                            <div class="settings-actions-stack mt-3">
+                                <button class="btn btn-secondary btn-block" id="export-data-btn">
+                                    📥 تصدير النسخة الاحتياطية (JSON)
+                                </button>
+
+                                <label class="btn btn-secondary btn-block file-input-label">
+                                    📤 استيراد نسخة احتياطية
+                                    <input type="file" id="import-data-file" accept=".json" style="display: none;" />
+                                </label>
+
+                                <button class="btn btn-danger-ghost btn-block mt-3" id="reset-db-btn">
+                                    ⚠️ إعادة ضبط ومسح كافة البيانات المحليّة
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- System Info Section -->
+                        <div class="card settings-card">
+                            <h3>ℹ️ معلومات التطبيق</h3>
+                            <div class="info-table mt-2">
+                                <div class="info-row"><span>اسم التطبيق:</span> <strong>TheStation (ذا ستيشن)</strong></div>
+                                <div class="info-row"><span>الإصدار:</span> <strong>V1.0.0 Production</strong></div>
+                                <div class="info-row"><span>اللغة الأساسية:</span> <strong>العربية (RTL)</strong></div>
+                                <div class="info-row"><span>حالة التخزين:</span> <strong>IndexedDB متصل ومفعل</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Mobile Bottom Navigation Bar -->
+        <nav class="mobile-bottom-nav">
+            <a href="#" class="mobile-nav-link active" data-tab="dashboard">
+                <span class="mobile-nav-icon">🏠</span>
+                <span class="mobile-nav-text">الرئيسية</span>
+            </a>
+            <a href="#" class="mobile-nav-link" data-tab="scripts">
+                <span class="mobile-nav-icon">📝</span>
+                <span class="mobile-nav-text">السكربتات</span>
+            </a>
+            <a href="#" class="mobile-nav-link" data-tab="youtube">
+                <span class="mobile-nav-icon">🎬</span>
+                <span class="mobile-nav-text">يوتيوب</span>
+            </a>
+            <a href="#" class="mobile-nav-link" data-tab="images">
+                <span class="mobile-nav-icon">🖼️</span>
+                <span class="mobile-nav-text">الصور</span>
+            </a>
+            <a href="#" class="mobile-nav-link" data-tab="tts">
+                <span class="mobile-nav-icon">🎙️</span>
+                <span class="mobile-nav-text">صوت</span>
+            </a>
+        </nav>
+
+        <!-- Toast Notifications Container -->
+        <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <!-- Application Script Modules -->
+    <script src="js/db.js"></script>
+    <script src="js/scripts.js"></script>
+    <script src="js/youtube.js"></script>
+    <script src="js/images.js"></script>
+    <script src="js/tts.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

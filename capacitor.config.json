@@ -1,0 +1,6 @@
+{
+  "appId": "com.thestation.app",
+  "appName": "TheStation",
+  "webDir": ".",
+  "bundledWebRuntime": false
+}

@@ -1,0 +1,19 @@
+{
+  "name": "thestation",
+  "version": "1.0.0",
+  "description": "TheStation - منصة وأدوات صُنّاع المحتوى الإعلامي للسكربتات، اليوتيوب، الصور، والصوتيات",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "build": "echo 'Static web assets ready for GitHub Pages & Capacitor'",
+    "cap:sync": "cap sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0"
+  },
+  "keywords": ["arabic", "content-creation", "scripts", "youtube", "images", "text-to-speech", "thestation", "capacitor"],
+  "author": "Abdulrahman Al-Ghashimi",
+  "license": "MIT"
+}

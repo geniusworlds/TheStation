@@ -1,0 +1,49 @@
+name: بناء تطبيق الأندرويد (Build Android APK)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: بناء ملف APK للأندرويد
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: استدعاء الكود (Checkout repository)
+        uses: actions/checkout@v4
+
+      - name: إعداد بيئة جافا (Setup Java JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: إعداد بيئة نود (Setup Node.js)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: تثبيت الحزم (Install dependencies)
+        run: |
+          npm install
+
+      - name: تهيئة Capacitor وإضافة منصة الأندرويد
+        run: |
+          npx cap add android || true
+          npx cap sync android
+
+      - name: بناء ملف APK عبر Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: رفع ملف الـ APK كملف جاهز للتحميل (Upload APK Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Istinbat-Android-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
