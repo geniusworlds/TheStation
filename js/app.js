@@ -6,19 +6,22 @@
 class StationApp {
   constructor() {
     this.currentTab = 'dashboard';
-    this.init();
+    // DOM may already be ready when scripts load at end of body
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => this._init());
+    } else {
+      this._init();
+    }
   }
 
-  init() {
-    document.addEventListener('DOMContentLoaded', () => {
-      this.bindNavigationEvents();
-      this.bindDashboardEvents();
-      this.loadInitialData();
-    });
+  _init() {
+    this.bindNavigationEvents();
+    this.bindDashboardEvents();
+    this.loadInitialData();
   }
 
   bindNavigationEvents() {
-    // Desktop & Mobile Nav Links
+    // Desktop Sidebar Nav Links
     document.querySelectorAll('.nav-link').forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
@@ -30,20 +33,23 @@ class StationApp {
       });
     });
 
+    // Mobile Bottom Nav Links
+    document.querySelectorAll('.mobile-nav-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetTab = link.dataset.tab;
+        if (targetTab) this.switchTab(targetTab);
+      });
+    });
+
     // Mobile Drawer Toggle
     const drawerToggle = document.getElementById('mobile-drawer-toggle');
     const drawerClose = document.getElementById('mobile-drawer-close');
     const backdrop = document.getElementById('sidebar-backdrop');
 
-    if (drawerToggle) {
-      drawerToggle.addEventListener('click', () => this.toggleMobileDrawer(true));
-    }
-    if (drawerClose) {
-      drawerClose.addEventListener('click', () => this.toggleMobileDrawer(false));
-    }
-    if (backdrop) {
-      backdrop.addEventListener('click', () => this.toggleMobileDrawer(false));
-    }
+    if (drawerToggle) drawerToggle.addEventListener('click', () => this.toggleMobileDrawer(true));
+    if (drawerClose) drawerClose.addEventListener('click', () => this.toggleMobileDrawer(false));
+    if (backdrop) backdrop.addEventListener('click', () => this.toggleMobileDrawer(false));
   }
 
   bindDashboardEvents() {
@@ -52,8 +58,6 @@ class StationApp {
       card.addEventListener('click', () => {
         const filter = card.dataset.filter;
         this.switchTab('scripts');
-        
-        // Trigger filter selection
         const filterBtn = document.querySelector(`.script-filter-btn[data-filter="${filter}"]`);
         if (filterBtn) filterBtn.click();
       });
@@ -71,27 +75,22 @@ class StationApp {
         if (window.scriptManager) window.scriptManager.createNewScript();
       });
     }
-
-    if (quickYt) {
-      quickYt.addEventListener('click', () => this.switchTab('youtube'));
-    }
-
-    if (quickImg) {
-      quickImg.addEventListener('click', () => this.switchTab('images'));
-    }
-
-    if (quickTts) {
-      quickTts.addEventListener('click', () => this.switchTab('tts'));
-    }
+    if (quickYt) quickYt.addEventListener('click', () => this.switchTab('youtube'));
+    if (quickImg) quickImg.addEventListener('click', () => this.switchTab('images'));
+    if (quickTts) quickTts.addEventListener('click', () => this.switchTab('tts'));
   }
 
   switchTab(tabName) {
     this.currentTab = tabName;
 
-    // Update Nav Active States
+    // Update Sidebar Nav Active States
     document.querySelectorAll('.nav-link').forEach(link => {
-      if (link.dataset.tab === tabName) link.classList.add('active');
-      else link.classList.remove('active');
+      link.classList.toggle('active', link.dataset.tab === tabName);
+    });
+
+    // Update Mobile Bottom Nav Active States
+    document.querySelectorAll('.mobile-nav-link').forEach(link => {
+      link.classList.toggle('active', link.dataset.tab === tabName);
     });
 
     // Hide all view sections
@@ -101,9 +100,7 @@ class StationApp {
 
     // Show target view
     const targetView = document.getElementById(`view-${tabName}`);
-    if (targetView) {
-      targetView.style.display = 'block';
-    }
+    if (targetView) targetView.style.display = 'block';
 
     // Tab specific load actions
     if (tabName === 'dashboard') {
@@ -153,7 +150,6 @@ class StationApp {
 
     const scripts = await window.stationDB.getAllScripts();
 
-    // Update Statistics
     const total = scripts.length;
     const written = scripts.filter(s => s.status === 'WRITTEN').length;
     const ready = scripts.filter(s => s.status === 'READY').length;
@@ -186,19 +182,21 @@ class StationApp {
         recentScriptsContainer.innerHTML = recentScripts.map(s => {
           const plainText = s.content ? s.content.replace(/<[^>]*>/g, '').trim() : '';
           const preview = plainText.length > 80 ? plainText.substring(0, 80) + '...' : (plainText || 'بدون محتوى');
-          
+
           let badgeHTML = '';
           if (s.status === 'READY') badgeHTML = '<span class="badge badge-ready">🟢 جاهز</span>';
           else if (s.status === 'WRITTEN') badgeHTML = '<span class="badge badge-written">🟡 مكتوب</span>';
           else badgeHTML = '<span class="badge badge-cancelled">🔴 ملغي</span>';
 
+          const escFn = window.scriptManager ? window.scriptManager.escapeHTML.bind(window.scriptManager) : (t => t);
+
           return `
             <div class="dash-script-item card">
               <div class="dash-script-header">
-                <h4>${window.scriptManager ? window.scriptManager.escapeHTML(s.title) : s.title}</h4>
+                <h4>${escFn(s.title)}</h4>
                 ${badgeHTML}
               </div>
-              <p class="dash-script-preview">${window.scriptManager ? window.scriptManager.escapeHTML(preview) : preview}</p>
+              <p class="dash-script-preview">${escFn(preview)}</p>
               <button class="btn btn-sm btn-primary" onclick="window.app.openScriptFromDash('${s.id}')">
                 📂 فتح السكربت
               </button>
@@ -211,18 +209,19 @@ class StationApp {
     // Recent Searches on Dashboard
     const ytRecentDash = document.getElementById('dash-recent-yt');
     const imgRecentDash = document.getElementById('dash-recent-img');
+    const escFn = window.scriptManager ? window.scriptManager.escapeHTML.bind(window.scriptManager) : (t => t);
 
     if (ytRecentDash) {
       const ytSearches = await window.stationDB.getRecentSearches('youtube', 3);
-      ytRecentDash.innerHTML = ytSearches.length > 0 
-        ? ytSearches.map(s => `<button class="recent-search-tag" onclick="window.app.quickSearchYT('${window.scriptManager.escapeHTML(s.query)}')">🎬 ${window.scriptManager.escapeHTML(s.query)}</button>`).join('')
+      ytRecentDash.innerHTML = ytSearches.length > 0
+        ? ytSearches.map(s => `<button class="recent-search-tag" onclick="window.app.quickSearchYT('${escFn(s.query)}')">🎬 ${escFn(s.query)}</button>`).join('')
         : '<p class="text-muted">لا يوجد عمليات بحث سابقة</p>';
     }
 
     if (imgRecentDash) {
       const imgSearches = await window.stationDB.getRecentSearches('image', 3);
       imgRecentDash.innerHTML = imgSearches.length > 0
-        ? imgSearches.map(s => `<button class="recent-search-tag" onclick="window.app.quickSearchImg('${window.scriptManager.escapeHTML(s.query)}')">🖼️ ${window.scriptManager.escapeHTML(s.query)}</button>`).join('')
+        ? imgSearches.map(s => `<button class="recent-search-tag" onclick="window.app.quickSearchImg('${escFn(s.query)}')">🖼️ ${escFn(s.query)}</button>`).join('')
         : '<p class="text-muted">لا يوجد عمليات بحث سابقة</p>';
     }
   }
@@ -257,10 +256,7 @@ window.showToast = function(message, type = 'info') {
 
   container.appendChild(toast);
 
-  setTimeout(() => {
-    toast.classList.add('show');
-  }, 10);
-
+  setTimeout(() => toast.classList.add('show'), 10);
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
