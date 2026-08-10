@@ -8,16 +8,16 @@ class ScriptManager {
     this.searchQuery = '';
     this.currentScript = null;
     this.autoSaveTimer = null;
-    // Fix: wait for DOM before binding events
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.bindEvents());
-    } else {
-      this.bindEvents();
-    }
+    this.scripts = [];
+    this._domReady(() => this.bindEvents());
+  }
+
+  _domReady(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
   }
 
   bindEvents() {
-    // Filter buttons
     document.querySelectorAll('.script-filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.script-filter-btn').forEach(b => b.classList.remove('active'));
@@ -27,173 +27,96 @@ class ScriptManager {
       });
     });
 
-    // Search input
     const searchInput = document.getElementById('script-search-input');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        this.searchQuery = e.target.value.toLowerCase().trim();
-        this.renderScriptsList();
-      });
-    }
+    if (searchInput) searchInput.addEventListener('input', (e) => { this.searchQuery = e.target.value.toLowerCase().trim(); this.renderScriptsList(); });
 
-    // New Script Button
     const newBtn = document.getElementById('create-script-btn');
     if (newBtn) newBtn.addEventListener('click', () => this.createNewScript());
 
-    // Editor Status Change
     const statusSelect = document.getElementById('editor-status-select');
-    if (statusSelect) {
-      statusSelect.addEventListener('change', () => {
-        if (this.currentScript) {
-          this.currentScript.status = statusSelect.value;
-          this.triggerAutoSave();
-          this.updateEditorStatusBadge();
-        }
-      });
-    }
+    if (statusSelect) statusSelect.addEventListener('change', () => { if (this.currentScript) { this.currentScript.status = statusSelect.value; this.triggerAutoSave(); this.updateEditorStatusBadge(); } });
 
-    // Editor Title Change
     const titleInput = document.getElementById('editor-title-input');
-    if (titleInput) {
-      titleInput.addEventListener('input', () => {
-        if (this.currentScript) {
-          this.currentScript.title = titleInput.value;
-          this.triggerAutoSave();
-        }
-      });
-    }
+    if (titleInput) titleInput.addEventListener('input', () => { if (this.currentScript) { this.currentScript.title = titleInput.value; this.triggerAutoSave(); } });
 
-    // Editor Content Area
     const contentArea = document.getElementById('editor-content-area');
-    if (contentArea) {
-      contentArea.addEventListener('input', () => {
-        if (this.currentScript) {
-          this.currentScript.content = contentArea.innerHTML;
-          this.updateCounts();
-          this.triggerAutoSave();
-        }
-      });
-    }
+    if (contentArea) contentArea.addEventListener('input', () => { if (this.currentScript) { this.currentScript.content = contentArea.innerHTML; this.updateCounts(); this.triggerAutoSave(); } });
 
-    // Toolbar formatting buttons
     document.querySelectorAll('.editor-toolbar-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
-        const command = btn.dataset.cmd;
-        const value = btn.dataset.val || null;
-
-        if (command === 'insertTatweel') {
-          document.execCommand('insertText', false, '\u0640');
-        } else if (command === 'formatBlock') {
-          document.execCommand('formatBlock', false, value);
-        } else {
-          document.execCommand(command, false, value);
-        }
-
+        const cmd = btn.dataset.cmd, val = btn.dataset.val || null;
+        if (cmd === 'insertTatweel') document.execCommand('insertText', false, '\u0640');
+        else if (cmd === 'formatBlock') document.execCommand('formatBlock', false, val);
+        else document.execCommand(cmd, false, val);
         const ca = document.getElementById('editor-content-area');
-        if (ca && this.currentScript) {
-          this.currentScript.content = ca.innerHTML;
-          this.updateCounts();
-          this.triggerAutoSave();
-        }
+        if (ca && this.currentScript) { this.currentScript.content = ca.innerHTML; this.updateCounts(); this.triggerAutoSave(); }
       });
     });
   }
 
   async loadScripts() {
-    await window.stationDB.isReady;
-    this.scripts = await window.stationDB.getAllScripts();
+    const container = document.getElementById('scripts-list-container');
+    if (container) container.innerHTML = '<div class="loading-spinner-container"><div class="spinner"></div></div>';
+    try {
+      this.scripts = await Promise.race([
+        window.stationDB.getAllScripts(),
+        new Promise(resolve => setTimeout(() => resolve([]), 5000))
+      ]);
+    } catch { this.scripts = []; }
     this.updateCounters();
     this.renderScriptsList();
   }
 
   updateCounters() {
-    const total = this.scripts.length;
-    const written = this.scripts.filter(s => s.status === 'WRITTEN').length;
-    const ready = this.scripts.filter(s => s.status === 'READY').length;
-    const cancelled = this.scripts.filter(s => s.status === 'CANCELLED').length;
-
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    set('count-all', total); set('count-written', written);
-    set('count-ready', ready); set('count-cancelled', cancelled);
-    set('dash-stat-total', total); set('dash-stat-written', written);
-    set('dash-stat-ready', ready); set('dash-stat-cancelled', cancelled);
+    const t = this.scripts.length;
+    const w = this.scripts.filter(s => s.status === 'WRITTEN').length;
+    const r = this.scripts.filter(s => s.status === 'READY').length;
+    const c = this.scripts.filter(s => s.status === 'CANCELLED').length;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('count-all', t); set('count-written', w); set('count-ready', r); set('count-cancelled', c);
+    set('dash-stat-total', t); set('dash-stat-written', w); set('dash-stat-ready', r); set('dash-stat-cancelled', c);
   }
 
   renderScriptsList() {
     const container = document.getElementById('scripts-list-container');
     if (!container) return;
-
-    let filtered = [...(this.scripts || [])];
+    let filtered = [...this.scripts];
     if (this.currentFilter !== 'ALL') filtered = filtered.filter(s => s.status === this.currentFilter);
-    if (this.searchQuery) {
-      filtered = filtered.filter(s => {
-        const titleMatch = s.title && s.title.toLowerCase().includes(this.searchQuery);
-        const textContent = s.content ? s.content.replace(/<[^>]*>/g, '').toLowerCase() : '';
-        return titleMatch || textContent.includes(this.searchQuery);
-      });
-    }
-    filtered.sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      return new Date(b.updatedAt) - new Date(a.updatedAt);
-    });
+    if (this.searchQuery) filtered = filtered.filter(s => (s.title || '').toLowerCase().includes(this.searchQuery) || (s.content || '').replace(/<[^>]*>/g, '').toLowerCase().includes(this.searchQuery));
+    filtered.sort((a, b) => { if (a.isPinned && !b.isPinned) return -1; if (!a.isPinned && b.isPinned) return 1; return new Date(b.updatedAt) - new Date(a.updatedAt); });
 
     if (filtered.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state card">
-          <div class="empty-icon">📝</div>
-          <h3>لم يتم العثور على أي سكربت</h3>
-          <p>يمكنك إنشاء سكربت جديد بالضغط على زر "إنشاء سكربت جديد" أعلاه.</p>
-          <button class="btn btn-primary" onclick="window.scriptManager.createNewScript()">+ إنشاء سكربت جديد</button>
-        </div>`;
+      container.innerHTML = `<div class="empty-state card"><div class="empty-icon">📝</div><h3>لا توجد سكربتات</h3><p>اضغط على زر إنشاء سكربت جديد للبدء.</p><button class="btn btn-primary" onclick="window.scriptManager.createNewScript()">+ إنشاء سكربت جديد</button></div>`;
       return;
     }
-    container.innerHTML = filtered.map(s => this.createScriptCardHTML(s)).join('');
+    container.innerHTML = filtered.map(s => this._cardHTML(s)).join('');
   }
 
-  createScriptCardHTML(script) {
-    const plainText = script.content ? script.content.replace(/<[^>]*>/g, '').trim() : '';
-    const preview = plainText.length > 120 ? plainText.substring(0, 120) + '...' : (plainText || 'لا يوجد محتوى بعد.');
-    const formattedDate = this.formatRelativeTime(script.updatedAt);
-    let statusBadge = '';
-    if (script.status === 'READY') statusBadge = `<span class="badge badge-ready">🟢 جاهز</span>`;
-    else if (script.status === 'WRITTEN') statusBadge = `<span class="badge badge-written">🟡 مكتوب</span>`;
-    else statusBadge = `<span class="badge badge-cancelled">🔴 ملغي</span>`;
-    const pinClass = script.isPinned ? 'pinned' : '';
-    return `
-      <div class="script-card card ${pinClass}">
-        <div class="script-card-header">
-          <h3 class="script-card-title">${this.escapeHTML(script.title || 'بدون عنوان')}</h3>
-          <button class="btn-icon pin-btn ${pinClass}" title="${script.isPinned ? 'إلغاء التثبيت' : 'تثبيت السكربت'}" onclick="window.scriptManager.togglePin('${script.id}', event)">📌</button>
-        </div>
-        <div class="script-card-status">${statusBadge}<span class="script-card-date">آخر تعديل: ${formattedDate}</span></div>
-        <p class="script-card-preview">${this.escapeHTML(preview)}</p>
-        <div class="script-card-actions">
-          <button class="btn btn-sm btn-primary" onclick="window.scriptManager.openScriptEditor('${script.id}')"> 📂 فتح السكربت</button>
-          <button class="btn btn-sm btn-secondary" onclick="window.scriptManager.duplicateScript('${script.id}', event)">📋 تكرار</button>
-          <button class="btn btn-sm btn-danger-ghost" onclick="window.scriptManager.deleteScript('${script.id}', event)">🗑️</button>
-        </div>
-      </div>`;
+  _cardHTML(s) {
+    const txt = (s.content || '').replace(/<[^>]*>/g, '').trim();
+    const preview = txt.length > 120 ? txt.substring(0, 120) + '...' : (txt || 'لا يوجد محتوى.');
+    const badge = s.status === 'READY' ? '<span class="badge badge-ready">🟢 جاهز</span>' : s.status === 'WRITTEN' ? '<span class="badge badge-written">🟡 مكتوب</span>' : '<span class="badge badge-cancelled">🔴 ملغي</span>';
+    return `<div class="script-card card ${s.isPinned ? 'pinned' : ''}">
+      <div class="script-card-header"><h3 class="script-card-title">${this.esc(s.title || 'بدون عنوان')}</h3>
+      <button class="btn-icon pin-btn" onclick="window.scriptManager.togglePin('${s.id}',event)">📌</button></div>
+      <div class="script-card-status">${badge}<span class="script-card-date">${this.relTime(s.updatedAt)}</span></div>
+      <p class="script-card-preview">${this.esc(preview)}</p>
+      <div class="script-card-actions">
+        <button class="btn btn-sm btn-primary" onclick="window.scriptManager.openScriptEditor('${s.id}')"> 📂 فتح</button>
+        <button class="btn btn-sm btn-secondary" onclick="window.scriptManager.duplicateScript('${s.id}',event)">📋 تكرار</button>
+        <button class="btn btn-sm btn-danger-ghost" onclick="window.scriptManager.deleteScript('${s.id}',event)">🗑️</button>
+      </div></div>`;
   }
 
   async createNewScript() {
-    await window.stationDB.isReady;
-    const newScript = {
-      title: 'سكربت جديد',
-      content: '<p>اكتب هنا محتوى السكربت الجديد...</p>',
-      status: 'WRITTEN',
-      isPinned: false,
-      audioUrl: null
-    };
-    const saved = await window.stationDB.saveScript(newScript);
+    const saved = await window.stationDB.saveScript({ title: 'سكربت جديد', content: '<p>اكتب هنا...</p>', status: 'WRITTEN', isPinned: false, audioUrl: null });
     await this.loadScripts();
     this.openScriptEditor(saved.id);
     if (window.showToast) window.showToast('تم إنشاء السكربت بنجاح', 'success');
   }
 
   async openScriptEditor(id) {
-    await window.stationDB.isReady;
     const script = await window.stationDB.getScriptById(id);
     if (!script) return;
     this.currentScript = script;
@@ -220,84 +143,77 @@ class ScriptManager {
     const s = document.getElementById('editor-status-select');
     const b = document.getElementById('editor-status-badge');
     if (!s || !b) return;
-    const map = { READY: ['badge badge-ready', '🟢 جاهز'], WRITTEN: ['badge badge-written', '🟡 مكتوب'], CANCELLED: ['badge badge-cancelled', '🔴 ملغي'] };
-    const [cls, text] = map[s.value] || map['WRITTEN'];
-    b.className = cls; b.textContent = text;
+    const m = { READY: ['badge badge-ready', '🟢 جاهز'], WRITTEN: ['badge badge-written', '🟡 مكتوب'], CANCELLED: ['badge badge-cancelled', '🔴 ملغي'] };
+    const [cls, txt] = m[s.value] || m.WRITTEN;
+    b.className = cls; b.textContent = txt;
   }
 
   updateCounts() {
     const c = document.getElementById('editor-content-area');
     if (!c) return;
-    const plainText = c.innerText || c.textContent || '';
-    const chars = plainText.length;
-    const words = plainText.trim() ? plainText.trim().split(/\s+/).length : 0;
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    set('editor-char-count', `${chars} حرف`);
+    const txt = c.innerText || '';
+    const words = txt.trim() ? txt.trim().split(/\s+/).length : 0;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('editor-char-count', `${txt.length} حرف`);
     set('editor-word-count', `${words} كلمة`);
-    set('editor-read-time', `~ ${Math.ceil(words / 130)} دقيقة قراءة`);
+    set('editor-read-time', `~ ${Math.ceil(words / 130)} دقيقة`);
   }
 
   triggerAutoSave() {
-    const ind = document.getElementById('autosave-indicator');
-    if (ind) ind.textContent = 'جاري الحفظ...';
-    if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
-    this.autoSaveTimer = setTimeout(() => this.triggerAutoSaveNow(), 1000);
+    const i = document.getElementById('autosave-indicator');
+    if (i) i.textContent = 'جاري الحفظ...';
+    clearTimeout(this.autoSaveTimer);
+    this.autoSaveTimer = setTimeout(() => this.triggerAutoSaveNow(), 1200);
   }
 
   async triggerAutoSaveNow() {
     if (!this.currentScript) return;
     await window.stationDB.saveScript(this.currentScript);
-    const ind = document.getElementById('autosave-indicator');
-    if (ind) ind.textContent = 'تم الحفظ تلقائياً ✓';
+    const i = document.getElementById('autosave-indicator');
+    if (i) i.textContent = 'تم الحفظ ✓';
   }
 
-  async togglePin(id, event) {
-    if (event) event.stopPropagation();
-    const script = await window.stationDB.getScriptById(id);
-    if (script) { script.isPinned = !script.isPinned; await window.stationDB.saveScript(script); await this.loadScripts(); }
+  async togglePin(id, e) {
+    if (e) e.stopPropagation();
+    const s = await window.stationDB.getScriptById(id);
+    if (s) { s.isPinned = !s.isPinned; await window.stationDB.saveScript(s); await this.loadScripts(); }
   }
 
-  async duplicateScript(id, event) {
-    if (event) event.stopPropagation();
-    const script = await window.stationDB.getScriptById(id);
-    if (script) {
-      await window.stationDB.saveScript({ title: (script.title || 'سكربت') + ' (نسخة)', content: script.content, status: script.status, isPinned: false, audioUrl: script.audioUrl });
-      await this.loadScripts();
-      if (window.showToast) window.showToast('تم نسخ السكربت بنجاح', 'success');
-    }
+  async duplicateScript(id, e) {
+    if (e) e.stopPropagation();
+    const s = await window.stationDB.getScriptById(id);
+    if (s) { await window.stationDB.saveScript({ title: (s.title || 'سكربت') + ' (نسخة)', content: s.content, status: s.status, isPinned: false }); await this.loadScripts(); if (window.showToast) window.showToast('تم التكرار بنجاح', 'success'); }
   }
 
-  async deleteScript(id, event) {
-    if (event) event.stopPropagation();
-    if (confirm('هل أنت متأكد من حذف هذا السكربت؟')) {
-      await window.stationDB.deleteScript(id);
-      await this.loadScripts();
-      if (window.showToast) window.showToast('تم حذف السكربت', 'info');
-    }
+  async deleteScript(id, e) {
+    if (e) e.stopPropagation();
+    if (!confirm('حذف هذا السكربت؟')) return;
+    await window.stationDB.deleteScript(id);
+    await this.loadScripts();
+    if (window.showToast) window.showToast('تم الحذف', 'info');
   }
 
   copyCurrentScriptText() {
     const c = document.getElementById('editor-content-area');
-    if (!c) return;
-    navigator.clipboard.writeText(c.innerText || c.textContent || '').then(() => {
-      if (window.showToast) window.showToast('تم نسخ نص السكربت إلى الحافظة', 'success');
-    });
+    if (c) navigator.clipboard.writeText(c.innerText || '').then(() => { if (window.showToast) window.showToast('تم النسخ', 'success'); });
   }
 
-  formatRelativeTime(isoString) {
-    if (!isoString) return '';
-    const diff = Math.floor((new Date() - new Date(isoString)) / 1000);
-    if (diff < 60) return 'منذ لحظات';
-    if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;
-    if (diff < 86400) return `منذ ${Math.floor(diff / 3600)} ساعة`;
-    if (diff < 604800) return `منذ ${Math.floor(diff / 86400)} يوم`;
-    return new Date(isoString).toLocaleDateString('ar-SA');
+  relTime(iso) {
+    if (!iso) return '';
+    const d = Math.floor((Date.now() - new Date(iso)) / 1000);
+    if (d < 60) return 'منذ لحظات';
+    if (d < 3600) return `منذ ${Math.floor(d/60)} دقيقة`;
+    if (d < 86400) return `منذ ${Math.floor(d/3600)} ساعة`;
+    return `منذ ${Math.floor(d/86400)} يوم`;
   }
 
-  escapeHTML(str) {
-    if (!str) return '';
-    return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
+  esc(str) {
+    return String(str || '').replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t] || t));
   }
+
+  // alias for compatibility
+  escapeHTML(str) { return this.esc(str); }
+  formatRelativeTime(iso) { return this.relTime(iso); }
 }
 
 window.scriptManager = new ScriptManager();

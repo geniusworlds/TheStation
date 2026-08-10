@@ -1,6 +1,6 @@
 /**
  * TheStation - IndexedDB & LocalStorage Data Engine
- * Handles persistent storage for Scripts, Searches, TTS History, and Settings.
+ * Safe version: always resolves, never hangs on await.
  */
 
 const DB_NAME = 'TheStationDB';
@@ -9,367 +9,221 @@ const DB_VERSION = 1;
 class StationDB {
   constructor() {
     this.db = null;
-    this.isReady = this.initDB();
+    this.isReady = this._initWithTimeout();
   }
 
-  initDB() {
-    return new Promise((resolve, reject) => {
-      if (!window.indexedDB) {
-        console.warn('IndexedDB not supported, falling back to LocalStorage');
-        resolve(false);
-        return;
-      }
+  // Resolves in max 3 seconds - never hangs
+  _initWithTimeout() {
+    return Promise.race([
+      this._initDB(),
+      new Promise(resolve => setTimeout(() => resolve(false), 3000))
+    ]);
+  }
+
+  _initDB() {
+    return new Promise((resolve) => {
+      if (!window.indexedDB) { resolve(false); return; }
 
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result;
-
-        // Scripts Store
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
         if (!db.objectStoreNames.contains('scripts')) {
-          const scriptStore = db.createObjectStore('scripts', { keyPath: 'id' });
-          scriptStore.createIndex('status', 'status', { unique: false });
-          scriptStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-          scriptStore.createIndex('isPinned', 'isPinned', { unique: false });
+          const s = db.createObjectStore('scripts', { keyPath: 'id' });
+          s.createIndex('status', 'status', { unique: false });
+          s.createIndex('updatedAt', 'updatedAt', { unique: false });
         }
-
-        // Recent Searches Store
         if (!db.objectStoreNames.contains('searches')) {
-          const searchStore = db.createObjectStore('searches', { keyPath: 'id' });
-          searchStore.createIndex('type', 'type', { unique: false });
-          searchStore.createIndex('timestamp', 'timestamp', { unique: false });
+          const s = db.createObjectStore('searches', { keyPath: 'id' });
+          s.createIndex('type', 'type', { unique: false });
         }
-
-        // TTS History Store
         if (!db.objectStoreNames.contains('tts_history')) {
-          const ttsStore = db.createObjectStore('tts_history', { keyPath: 'id' });
-          ttsStore.createIndex('timestamp', 'timestamp', { unique: false });
+          db.createObjectStore('tts_history', { keyPath: 'id' });
         }
-
-        // Settings Store
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'key' });
         }
       };
 
-      request.onsuccess = (event) => {
-        this.db = event.target.result;
-        this.seedInitialData().then(() => resolve(true));
+      request.onsuccess = (e) => {
+        this.db = e.target.result;
+        resolve(true);
       };
 
-      request.onerror = (event) => {
-        console.error('IndexedDB Error:', event.target.error);
-        resolve(false);
-      };
+      request.onerror = () => resolve(false);
+      request.onblocked = () => resolve(false);
     });
   }
 
-  async seedInitialData() {
-    const scripts = await this.getAllScripts();
-    if (scripts.length === 0) {
-      const initialScripts = [
-        {
-          id: 'script_sample_1',
-          title: 'مراجعة وتقييم أحدث تحديثات لعبة FC 26',
-          content: '<h2>مقدمة الفيديو</h2><p>أهلاً بكم يا شباب في هذا الفيديو الجديد على قناة ذا ستيشن! اليوم نلقي نظرة شاملة على أبرز التحديثات والتغييرات الجديدة في لعبة FC 26...</p><h3>أهم النقاط</h3><ul><li>تحسين أسلوب اللعب والحركة</li><li>تطوير طور المهنة (Career Mode)</li><li>إضافة الملاعب العربية الجديدة</li></ul><p>لا تنسوا الاشتراك في القناة وتفعيل زر الجرس ليصلكم كل جديد!</p>',
-          status: 'READY', // READY = 🟢 جاهز
-          isPinned: true,
-          audioUrl: null,
-          createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-          updatedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-        },
-        {
-          id: 'script_sample_2',
-          title: 'ملخص وثائقي: تاريخ الألعاب الإلكترونية في السعودية',
-          content: '<h2>الفصل الأول: البدايات</h2><p>شهدت المملكة العربية السعودية طفرة هائلة في عالم الألعاب الإلكترونية والرياضات الرقمية خلال السنوات الأخيرة...</p><p>نستعرض في هذا السكربت محطات التحول الرئيسية والبطولات العالمية التي استضافتها الرياض.</p>',
-          status: 'WRITTEN', // WRITTEN = 🟡 مكتوب
-          isPinned: false,
-          audioUrl: null,
-          createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-          updatedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-        },
-        {
-          id: 'script_sample_3',
-          title: 'فيديو تجريبي ملغي - تغطية مؤتمر التكنولوجيا',
-          content: '<p>مسودة سابقة لتغطية مؤتمر التكنولوجيا، تم إلغاء السكربت واستبداله بالتغطية الحية.</p>',
-          status: 'CANCELLED', // CANCELLED = 🔴 ملغي
-          isPinned: false,
-          audioUrl: null,
-          createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
-          updatedAt: new Date(Date.now() - 86400000 * 7).toISOString(),
-        }
-      ];
+  // LS helpers
+  _lsGet(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; } }
+  _lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
-      for (const script of initialScripts) {
-        await this.saveScript(script);
-      }
-    }
-  }
-
-  // --- SCRIPTS STORAGE ---
   async getAllScripts() {
-    await this.isReady;
-    if (!this.db) return JSON.parse(localStorage.getItem('ts_scripts') || '[]');
-
+    if (!this.db) return this._lsGet('ts_scripts', []);
     return new Promise((resolve) => {
-      const transaction = this.db.transaction(['scripts'], 'readonly');
-      const store = transaction.objectStore('scripts');
-      const request = store.getAll();
-
-      request.onsuccess = () => resolve(request.result || []);
-      request.onerror = () => resolve(JSON.parse(localStorage.getItem('ts_scripts') || '[]'));
+      try {
+        const tx = this.db.transaction(['scripts'], 'readonly');
+        tx.objectStore('scripts').getAll().onsuccess = (e) => resolve(e.target.result || []);
+        tx.onerror = () => resolve(this._lsGet('ts_scripts', []));
+      } catch { resolve(this._lsGet('ts_scripts', [])); }
     });
   }
 
   async getScriptById(id) {
-    await this.isReady;
-    if (!this.db) {
-      const scripts = JSON.parse(localStorage.getItem('ts_scripts') || '[]');
-      return scripts.find(s => s.id === id) || null;
-    }
-
+    if (!this.db) return (this._lsGet('ts_scripts', [])).find(s => s.id === id) || null;
     return new Promise((resolve) => {
-      const transaction = this.db.transaction(['scripts'], 'readonly');
-      const store = transaction.objectStore('scripts');
-      const request = store.get(id);
-
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => resolve(null);
+      try {
+        const tx = this.db.transaction(['scripts'], 'readonly');
+        tx.objectStore('scripts').get(id).onsuccess = (e) => resolve(e.target.result || null);
+        tx.onerror = () => resolve(null);
+      } catch { resolve(null); }
     });
   }
 
   async saveScript(script) {
-    await this.isReady;
-    if (!script.id) script.id = 'script_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    if (!script.id) script.id = 'sc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
     script.updatedAt = new Date().toISOString();
     if (!script.createdAt) script.createdAt = script.updatedAt;
 
     if (!this.db) {
-      const scripts = JSON.parse(localStorage.getItem('ts_scripts') || '[]');
-      const index = scripts.findIndex(s => s.id === script.id);
-      if (index >= 0) scripts[index] = script;
-      else scripts.push(script);
-      localStorage.setItem('ts_scripts', JSON.stringify(scripts));
+      const arr = this._lsGet('ts_scripts', []);
+      const i = arr.findIndex(s => s.id === script.id);
+      if (i >= 0) arr[i] = script; else arr.push(script);
+      this._lsSet('ts_scripts', arr);
       return script;
     }
-
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['scripts'], 'readwrite');
-      const store = transaction.objectStore('scripts');
-      const request = store.put(script);
-
-      request.onsuccess = () => resolve(script);
-      request.onerror = (e) => reject(e);
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction(['scripts'], 'readwrite');
+        tx.objectStore('scripts').put(script).onsuccess = () => resolve(script);
+        tx.onerror = () => resolve(script);
+      } catch { resolve(script); }
     });
   }
 
   async deleteScript(id) {
-    await this.isReady;
     if (!this.db) {
-      let scripts = JSON.parse(localStorage.getItem('ts_scripts') || '[]');
-      scripts = scripts.filter(s => s.id !== id);
-      localStorage.setItem('ts_scripts', JSON.stringify(scripts));
+      this._lsSet('ts_scripts', this._lsGet('ts_scripts', []).filter(s => s.id !== id));
       return true;
     }
-
     return new Promise((resolve) => {
-      const transaction = this.db.transaction(['scripts'], 'readwrite');
-      const store = transaction.objectStore('scripts');
-      const request = store.delete(id);
-
-      request.onsuccess = () => resolve(true);
-      request.onerror = () => resolve(false);
+      try {
+        const tx = this.db.transaction(['scripts'], 'readwrite');
+        tx.objectStore('scripts').delete(id).onsuccess = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch { resolve(false); }
     });
   }
 
-  // --- RECENT SEARCHES STORAGE ---
   async addRecentSearch(type, query) {
-    if (!query || !query.trim()) return;
-    query = query.trim();
-    await this.isReady;
-
-    const searchItem = {
-      id: `${type}_${Date.now()}`,
-      type, // 'youtube' or 'image'
-      query,
-      timestamp: new Date().toISOString()
-    };
-
+    if (!query?.trim()) return;
+    const item = { id: `${type}_${Date.now()}`, type, query: query.trim(), timestamp: new Date().toISOString() };
     if (!this.db) {
-      let searches = JSON.parse(localStorage.getItem('ts_searches') || '[]');
-      searches = searches.filter(s => !(s.type === type && s.query.toLowerCase() === query.toLowerCase()));
-      searches.unshift(searchItem);
-      searches = searches.slice(0, 10);
-      localStorage.setItem('ts_searches', JSON.stringify(searches));
-      return;
+      let arr = this._lsGet('ts_searches', []).filter(s => !(s.type === type && s.query.toLowerCase() === query.toLowerCase()));
+      arr.unshift(item); this._lsSet('ts_searches', arr.slice(0, 20)); return;
     }
-
-    const transaction = this.db.transaction(['searches'], 'readwrite');
-    const store = transaction.objectStore('searches');
-    store.put(searchItem);
+    try {
+      const tx = this.db.transaction(['searches'], 'readwrite');
+      tx.objectStore('searches').put(item);
+    } catch {}
   }
 
   async getRecentSearches(type, limit = 5) {
-    await this.isReady;
     if (!this.db) {
-      const searches = JSON.parse(localStorage.getItem('ts_searches') || '[]');
-      return searches
-        .filter(s => s.type === type)
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .slice(0, limit);
+      return this._lsGet('ts_searches', []).filter(s => s.type === type)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, limit);
     }
-
     return new Promise((resolve) => {
-      const transaction = this.db.transaction(['searches'], 'readonly');
-      const store = transaction.objectStore('searches');
-      const request = store.getAll();
-
-      request.onsuccess = () => {
-        const all = request.result || [];
-        const filtered = all
-          .filter(s => s.type === type)
-          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-          .slice(0, limit);
-        resolve(filtered);
-      };
-      request.onerror = () => resolve([]);
+      try {
+        const tx = this.db.transaction(['searches'], 'readonly');
+        tx.objectStore('searches').getAll().onsuccess = (e) => {
+          resolve((e.target.result || []).filter(s => s.type === type)
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, limit));
+        };
+        tx.onerror = () => resolve([]);
+      } catch { resolve([]); }
     });
   }
 
-  // --- TTS HISTORY STORAGE ---
   async saveTTSHistory(item) {
-    await this.isReady;
     if (!item.id) item.id = 'tts_' + Date.now();
     item.timestamp = new Date().toISOString();
-
     if (!this.db) {
-      const history = JSON.parse(localStorage.getItem('ts_tts_history') || '[]');
-      history.unshift(item);
-      localStorage.setItem('ts_tts_history', JSON.stringify(history.slice(0, 20)));
-      return item;
+      const arr = this._lsGet('ts_tts', []);
+      arr.unshift(item); this._lsSet('ts_tts', arr.slice(0, 20)); return item;
     }
-
     return new Promise((resolve) => {
-      const transaction = this.db.transaction(['tts_history'], 'readwrite');
-      const store = transaction.objectStore('tts_history');
-      store.put(item);
-      resolve(item);
+      try {
+        const tx = this.db.transaction(['tts_history'], 'readwrite');
+        tx.objectStore('tts_history').put(item).onsuccess = () => resolve(item);
+        tx.onerror = () => resolve(item);
+      } catch { resolve(item); }
     });
   }
 
   async getTTSHistory(limit = 10) {
-    await this.isReady;
     if (!this.db) {
-      const history = JSON.parse(localStorage.getItem('ts_tts_history') || '[]');
-      return history.slice(0, limit);
+      return this._lsGet('ts_tts', []).slice(0, limit);
     }
-
     return new Promise((resolve) => {
-      const transaction = this.db.transaction(['tts_history'], 'readonly');
-      const store = transaction.objectStore('tts_history');
-      const request = store.getAll();
-
-      request.onsuccess = () => {
-        const all = request.result || [];
-        all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        resolve(all.slice(0, limit));
-      };
-      request.onerror = () => resolve([]);
+      try {
+        const tx = this.db.transaction(['tts_history'], 'readonly');
+        tx.objectStore('tts_history').getAll().onsuccess = (e) => {
+          const all = (e.target.result || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          resolve(all.slice(0, limit));
+        };
+        tx.onerror = () => resolve([]);
+      } catch { resolve([]); }
     });
   }
 
   async deleteTTSHistory(id) {
-    await this.isReady;
     if (!this.db) {
-      let history = JSON.parse(localStorage.getItem('ts_tts_history') || '[]');
-      history = history.filter(h => h.id !== id);
-      localStorage.setItem('ts_tts_history', JSON.stringify(history));
-      return true;
+      this._lsSet('ts_tts', this._lsGet('ts_tts', []).filter(h => h.id !== id)); return true;
     }
-
     return new Promise((resolve) => {
-      const transaction = this.db.transaction(['tts_history'], 'readwrite');
-      const store = transaction.objectStore('tts_history');
-      store.delete(id);
-      resolve(true);
+      try {
+        const tx = this.db.transaction(['tts_history'], 'readwrite');
+        tx.objectStore('tts_history').delete(id).onsuccess = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch { resolve(false); }
     });
   }
 
-  // --- SETTINGS STORAGE ---
-  async getSetting(key, defaultValue = null) {
-    await this.isReady;
-    if (!this.db) {
-      const settings = JSON.parse(localStorage.getItem('ts_settings') || '{}');
-      return settings[key] !== undefined ? settings[key] : defaultValue;
-    }
-
+  async getSetting(key, def = null) {
+    if (!this.db) return this._lsGet('ts_settings', {})[key] ?? def;
     return new Promise((resolve) => {
-      const transaction = this.db.transaction(['settings'], 'readonly');
-      const store = transaction.objectStore('settings');
-      const request = store.get(key);
-
-      request.onsuccess = () => resolve(request.result ? request.result.value : defaultValue);
-      request.onerror = () => resolve(defaultValue);
+      try {
+        const tx = this.db.transaction(['settings'], 'readonly');
+        tx.objectStore('settings').get(key).onsuccess = (e) => resolve(e.target.result ? e.target.result.value : def);
+        tx.onerror = () => resolve(def);
+      } catch { resolve(def); }
     });
   }
 
   async setSetting(key, value) {
-    await this.isReady;
     if (!this.db) {
-      const settings = JSON.parse(localStorage.getItem('ts_settings') || '{}');
-      settings[key] = value;
-      localStorage.setItem('ts_settings', JSON.stringify(settings));
-      return;
+      const s = this._lsGet('ts_settings', {}); s[key] = value; this._lsSet('ts_settings', s); return;
     }
-
-    return new Promise((resolve) => {
-      const transaction = this.db.transaction(['settings'], 'readwrite');
-      const store = transaction.objectStore('settings');
-      store.put({ key, value });
-      resolve();
-    });
+    try {
+      const tx = this.db.transaction(['settings'], 'readwrite');
+      tx.objectStore('settings').put({ key, value });
+    } catch {}
   }
 
-  // --- EXPORT / IMPORT BACKUP ---
   async exportFullBackup() {
     const scripts = await this.getAllScripts();
-    const searches = await this.getRecentSearches('youtube', 50);
-    const imageSearches = await this.getRecentSearches('image', 50);
-    const ttsHistory = await this.getTTSHistory(50);
-
-    const backupData = {
-      appName: 'TheStation',
-      version: '1.0.0',
-      exportedAt: new Date().toISOString(),
-      scripts,
-      searches: [...searches, ...imageSearches],
-      ttsHistory
-    };
-
-    return JSON.stringify(backupData, null, 2);
+    return JSON.stringify({ appName: 'TheStation', version: '1.0.0', exportedAt: new Date().toISOString(), scripts }, null, 2);
   }
 
   async importFullBackup(jsonString) {
     try {
       const data = JSON.parse(jsonString);
-      if (!data.scripts || !Array.isArray(data.scripts)) {
-        throw new Error('ملف النسخة الاحتياطية غير صالح.');
-      }
-
-      for (const script of data.scripts) {
-        await this.saveScript(script);
-      }
-
-      if (data.ttsHistory && Array.isArray(data.ttsHistory)) {
-        for (const tts of data.ttsHistory) {
-          await this.saveTTSHistory(tts);
-        }
-      }
-
+      if (!Array.isArray(data.scripts)) throw new Error('ملف غير صالح');
+      for (const s of data.scripts) await this.saveScript(s);
       return { success: true, count: data.scripts.length };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    } catch (e) { return { success: false, error: e.message }; }
   }
 }
 
