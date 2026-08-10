@@ -1,6 +1,5 @@
 /**
  * TheStation - YouTube Video Search & Workspace Engine
- * Handles searching YouTube, iframe player control, section timestamp selection, previewing, and export links.
  */
 
 class YouTubeTool {
@@ -11,382 +10,250 @@ class YouTubeTool {
     this.endTime = 0;
     this.previewInterval = null;
     this.isPlayerReady = false;
-
-    this.init();
+    this._domReady(() => this._init());
   }
 
-  init() {
+  _domReady(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  _init() {
     this.bindEvents();
-    this.loadYouTubeIframeAPI();
+    this._loadYTApi();
   }
 
-  loadYouTubeIframeAPI() {
-    if (!window.YT) {
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-      window.onYouTubeIframeAPIReady = () => {
-        console.log('YouTube Iframe API Ready');
-      };
-    }
+  _loadYTApi() {
+    if (window.YT) return;
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+    window.onYouTubeIframeAPIReady = () => { this.isPlayerReady = false; };
   }
 
   bindEvents() {
-    const searchBtn = document.getElementById('yt-search-btn');
-    const searchInput = document.getElementById('yt-search-input');
+    const btn = document.getElementById('yt-search-btn');
+    const inp = document.getElementById('yt-search-input');
+    if (btn) btn.addEventListener('click', () => this.performSearch());
+    if (inp) inp.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.performSearch(); });
 
-    if (searchBtn && searchInput) {
-      searchBtn.addEventListener('click', () => this.performSearch());
-      searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.performSearch();
-      });
-    }
+    const setStart = document.getElementById('yt-set-start-btn');
+    const setEnd = document.getElementById('yt-set-end-btn');
+    const preview = document.getElementById('yt-preview-section-btn');
+    const reset = document.getElementById('yt-reset-section-btn');
+    if (setStart) setStart.addEventListener('click', () => this.setStartTimeFromCurrent());
+    if (setEnd) setEnd.addEventListener('click', () => this.setEndTimeFromCurrent());
+    if (preview) preview.addEventListener('click', () => this.previewSection());
+    if (reset) reset.addEventListener('click', () => this.resetSection());
 
-    // Section Time Controls
-    const setStartBtn = document.getElementById('yt-set-start-btn');
-    const setEndBtn = document.getElementById('yt-set-end-btn');
-    const previewSectionBtn = document.getElementById('yt-preview-section-btn');
-    const resetSectionBtn = document.getElementById('yt-reset-section-btn');
-
-    if (setStartBtn) setStartBtn.addEventListener('click', () => this.setStartTimeFromCurrent());
-    if (setEndBtn) setEndBtn.addEventListener('click', () => this.setEndTimeFromCurrent());
-    if (previewSectionBtn) previewSectionBtn.addEventListener('click', () => this.previewSection());
-    if (resetSectionBtn) resetSectionBtn.addEventListener('click', () => this.resetSection());
-
-    const startInput = document.getElementById('yt-start-time-input');
-    const endInput = document.getElementById('yt-end-time-input');
-
-    if (startInput) {
-      startInput.addEventListener('change', () => {
-        this.startTime = this.parseTimestampToSeconds(startInput.value);
-        this.updateDurationDisplay();
-      });
-    }
-
-    if (endInput) {
-      endInput.addEventListener('change', () => {
-        this.endTime = this.parseTimestampToSeconds(endInput.value);
-        this.updateDurationDisplay();
-      });
-    }
+    const startInp = document.getElementById('yt-start-time-input');
+    const endInp = document.getElementById('yt-end-time-input');
+    if (startInp) startInp.addEventListener('change', () => { this.startTime = this._parseTs(startInp.value); this._updateDuration(); });
+    if (endInp) endInp.addEventListener('change', () => { this.endTime = this._parseTs(endInp.value); this._updateDuration(); });
   }
 
   async performSearch(queryOverride = null) {
-    const searchInput = document.getElementById('yt-search-input');
-    const query = queryOverride || (searchInput ? searchInput.value.trim() : '');
+    const inp = document.getElementById('yt-search-input');
+    const query = (queryOverride || (inp ? inp.value.trim() : '')).trim();
 
     if (!query) {
-      if (window.showToast) window.showToast('يرجى كتابة كلمة البحث في يوتيوب', 'warning');
+      if (window.showToast) window.showToast('يرجى كتابة كلمة البحث', 'warning');
       return;
     }
 
-    if (searchInput) searchInput.value = query;
+    if (inp) inp.value = query;
 
-    // Save search to history
-    if (window.stationDB) {
-      await window.stationDB.addRecentSearch('youtube', query);
-      this.renderRecentSearches();
-    }
+    try { await window.stationDB.addRecentSearch('youtube', query); this.renderRecentSearches(); } catch {}
 
     const container = document.getElementById('yt-results-container');
-    if (container) {
-      container.innerHTML = `
-        <div class="loading-spinner-container">
-          <div class="spinner"></div>
-          <p>جاري البحث في يوتيوب عن "${this.escapeHTML(query)}"...</p>
-        </div>
-      `;
-    }
+    if (container) container.innerHTML = `<div class="loading-spinner-container"><div class="spinner"></div><p>جاري البحث عن "${this.esc(query)}"...</p></div>`;
 
     try {
-      const apiKey = await window.stationDB.getSetting('youtube_api_key');
+      // Fix: correct key name 'yt_api_key'
+      let apiKey = null;
+      try { apiKey = await window.stationDB.getSetting('yt_api_key'); } catch {}
       let results = [];
 
       if (apiKey) {
-        // Use Official YouTube Data API v3
-        const response = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=12&q=${encodeURIComponent(query)}&type=video&key=${apiKey}`);
-        const data = await response.json();
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=12&q=${encodeURIComponent(query)}&type=video&key=${apiKey}`);
+        const data = await res.json();
         if (data.items) {
           results = data.items.map(item => ({
             id: item.id.videoId,
             title: item.snippet.title,
             channel: item.snippet.channelTitle,
-            thumbnail: item.snippet.thumbnails.high ? item.snippet.thumbnails.high.url : item.snippet.thumbnails.default.url,
+            thumbnail: (item.snippet.thumbnails.high || item.snippet.thumbnails.default).url,
             publishedAt: item.snippet.publishedAt ? new Date(item.snippet.publishedAt).toLocaleDateString('ar-SA') : '',
             duration: 'فيديو'
           }));
         }
-      } else {
-        // High quality fallback search using Invidious / Piped API
-        const response = await fetch(`https://invidious.io.lol/api/v1/search?q=${encodeURIComponent(query)}&type=video`);
-        if (response.ok) {
-          const data = await response.json();
+      }
+
+      if (results.length === 0) {
+        // Try Invidious fallback
+        const invRes = await fetch(`https://invidious.io.lol/api/v1/search?q=${encodeURIComponent(query)}&type=video`);
+        if (invRes.ok) {
+          const data = await invRes.json();
           results = data.slice(0, 12).map(item => ({
             id: item.videoId,
             title: item.title,
             channel: item.author,
-            thumbnail: item.videoThumbnails ? item.videoThumbnails.find(t => t.quality === 'medium')?.url || item.videoThumbnails[0].url : `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`,
+            thumbnail: item.videoThumbnails ? (item.videoThumbnails.find(t => t.quality === 'medium') || item.videoThumbnails[0]).url : `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`,
             publishedAt: item.publishedText || '',
-            duration: this.formatSeconds(item.lengthSeconds || 0)
+            duration: this._fmtSecs(item.lengthSeconds || 0)
           }));
-        } else {
-          throw new Error('Fallback service unavailable');
         }
       }
 
-      this.renderSearchResults(results);
-    } catch (err) {
-      console.warn('YouTube primary search error, attempting secondary fallback:', err);
-      // Secondary fallback sample / direct search
-      this.renderSearchFallback(query);
+      if (results.length === 0) throw new Error('no results');
+      this._renderResults(results, query);
+    } catch {
+      // Final fallback: direct YouTube search button
+      this._renderFallback(query);
     }
   }
 
-  renderSearchFallback(query) {
+  _renderFallback(query) {
     const container = document.getElementById('yt-results-container');
     if (!container) return;
-
-    // Generate reliable Youtube items or direct search card
-    const sampleIds = ['dQw4w9WgXcQ', 'M7lc1UVf-VE', '3JZ_D3ELwOQ', '2Vv-BfVoq4g'];
-    const results = sampleIds.map((id, index) => ({
-      id,
-      title: `${query} - مقطع يوتيوب رقم ${index + 1}`,
-      channel: 'قناة المحتوى العربي',
-      thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-      publishedAt: 'مؤخراً',
-      duration: '03:45'
-    }));
-
-    this.renderSearchResults(results);
-  }
-
-  renderSearchResults(results) {
-    const container = document.getElementById('yt-results-container');
-    if (!container) return;
-
-    if (!results || results.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state card">
-          <div class="empty-icon">🎬</div>
-          <h3>لم يتم العثور على نتائج</h3>
-          <p>جرّب البحث بكلمات مفتاحية أخرى في يوتيوب.</p>
-        </div>
-      `;
-      return;
-    }
-
     container.innerHTML = `
-      <div class="grid-layout">
-        ${results.map(video => `
-          <div class="yt-video-card card">
-            <div class="yt-thumbnail-wrapper">
-              <img src="${video.thumbnail}" alt="${this.escapeHTML(video.title)}" class="yt-thumbnail" loading="lazy" />
-              <span class="yt-duration-badge">${video.duration}</span>
-            </div>
-            <div class="yt-video-info">
-              <h4 class="yt-video-title">${this.escapeHTML(video.title)}</h4>
-              <p class="yt-video-channel">📺 ${this.escapeHTML(video.channel)}</p>
-              ${video.publishedAt ? `<p class="yt-video-date">📅 ${video.publishedAt}</p>` : ''}
-              <button class="btn btn-primary btn-sm btn-block" onclick="window.youtubeTool.openWorkspace('${video.id}', '${this.escapeHTML(video.title.replace(/'/g, "\\'"))}', '${this.escapeHTML(video.channel.replace(/'/g, "\\'"))}')">
-                🎬 فتح في مساحة العمل
-              </button>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
+      <div class="empty-state card">
+        <div class="empty-icon">🎬</div>
+        <h3>تعذر التوصل لخدمة البحث</h3>
+        <p>يمكنك البحث مباشرةً على يوتيوب:</p>
+        <a class="btn btn-primary" href="https://www.youtube.com/results?search_query=${encodeURIComponent(query)}" target="_blank">
+          🔍 ابحث عن "${this.esc(query)}" على يوتيوب
+        </a>
+      </div>`;
+  }
+
+  _renderResults(results, query) {
+    const container = document.getElementById('yt-results-container');
+    if (!container) return;
+    if (!results || results.length === 0) { this._renderFallback(query); return; }
+    container.innerHTML = `<div class="grid-layout">${results.map(v => `
+      <div class="yt-video-card card">
+        <div class="yt-thumbnail-wrapper">
+          <img src="${v.thumbnail}" alt="${this.esc(v.title)}" class="yt-thumbnail" loading="lazy" />
+          <span class="yt-duration-badge">${v.duration}</span>
+        </div>
+        <div class="yt-video-info">
+          <h4 class="yt-video-title">${this.esc(v.title)}</h4>
+          <p class="yt-video-channel">📺 ${this.esc(v.channel)}</p>
+          ${v.publishedAt ? `<p class="yt-video-date">📅 ${v.publishedAt}</p>` : ''}
+          <button class="btn btn-primary btn-sm btn-block" onclick="window.youtubeTool.openWorkspace('${v.id}','${this.esc(v.title.replace(/'/g,"\\'"  ))}','${this.esc(v.channel.replace(/'/g,"\\'" ))}')"> 🎬 فتح في مساحة العمل</button>
+        </div>
+      </div>`).join('')}</div>`;
   }
 
   async renderRecentSearches() {
     const container = document.getElementById('yt-recent-searches');
-    if (!container || !window.stationDB) return;
-
-    const searches = await window.stationDB.getRecentSearches('youtube', 6);
-    if (searches.length === 0) {
-      container.style.display = 'none';
-      return;
-    }
-
-    container.style.display = 'block';
-    container.innerHTML = `
-      <span class="recent-tag-label">عمليات البحث الأخيرة:</span>
-      ${searches.map(s => `
-        <button class="recent-search-tag" onclick="window.youtubeTool.performSearch('${this.escapeHTML(s.query)}')">
-          🔍 ${this.escapeHTML(s.query)}
-        </button>
-      `).join('')}
-    `;
+    if (!container) return;
+    try {
+      const searches = await window.stationDB.getRecentSearches('youtube', 6);
+      if (searches.length === 0) { container.style.display = 'none'; return; }
+      container.style.display = 'block';
+      container.innerHTML = `<span class="recent-tag-label">عمليات البحث الأخيرة:</span>${searches.map(s => `<button class="recent-search-tag" onclick="window.youtubeTool.performSearch('${this.esc(s.query.replace(/'/g,"\\'" ))}')">🔍 ${this.esc(s.query)}</button>`).join('')}`;
+    } catch { container.style.display = 'none'; }
   }
 
   openWorkspace(videoId, title, channel) {
     this.currentVideo = { id: videoId, title, channel };
-
-    // Update UI elements
     const titleEl = document.getElementById('yt-workspace-title');
     const channelEl = document.getElementById('yt-workspace-channel');
     const linkEl = document.getElementById('yt-workspace-link');
-
     if (titleEl) titleEl.textContent = title;
     if (channelEl) channelEl.textContent = channel;
-    if (linkEl) {
-      linkEl.href = `https://www.youtube.com/watch?v=${videoId}`;
-      linkEl.textContent = `https://youtu.be/${videoId}`;
-    }
-
-    // Initialize or load YouTube Player
-    this.initPlayer(videoId);
-
-    // Reset timestamp selections
+    if (linkEl) { linkEl.href = `https://www.youtube.com/watch?v=${videoId}`; linkEl.textContent = `https://youtu.be/${videoId}`; }
+    this._initPlayer(videoId);
     this.resetSection();
-
-    // Show Workspace view
     document.getElementById('yt-search-view').style.display = 'none';
     document.getElementById('yt-workspace-view').style.display = 'block';
   }
 
   closeWorkspace() {
-    if (this.player && this.player.pauseVideo) {
-      this.player.pauseVideo();
-    }
+    if (this.player?.pauseVideo) this.player.pauseVideo();
     if (this.previewInterval) clearInterval(this.previewInterval);
-
     document.getElementById('yt-workspace-view').style.display = 'none';
     document.getElementById('yt-search-view').style.display = 'block';
   }
 
-  initPlayer(videoId) {
-    const playerDiv = document.getElementById('yt-iframe-container');
-    if (!playerDiv) return;
-
-    playerDiv.innerHTML = `<div id="yt-player-element"></div>`;
-
+  _initPlayer(videoId) {
+    const div = document.getElementById('yt-iframe-container');
+    if (!div) return;
+    div.innerHTML = '<div id="yt-player-element"></div>';
     if (window.YT && window.YT.Player) {
       this.player = new window.YT.Player('yt-player-element', {
-        height: '390',
-        width: '100%',
-        videoId: videoId,
-        playerVars: {
-          'autoplay': 1,
-          'rel': 0,
-          'modestbranding': 1
-        },
-        events: {
-          'onReady': () => {
-            this.isPlayerReady = true;
-          }
-        }
+        height: '390', width: '100%', videoId,
+        playerVars: { autoplay: 1, rel: 0, modestbranding: 1 },
+        events: { onReady: () => { this.isPlayerReady = true; } }
       });
     } else {
-      // Fallback standard responsive iframe
-      playerDiv.innerHTML = `
-        <iframe id="yt-player-element" width="100%" height="390" src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-      `;
+      div.innerHTML = `<iframe width="100%" height="390" src="https://www.youtube.com/embed/${videoId}?autoplay=1" frameborder="0" allowfullscreen></iframe>`;
     }
   }
 
-  getCurrentPlayerTime() {
-    if (this.player && typeof this.player.getCurrentTime === 'function') {
-      return Math.floor(this.player.getCurrentTime());
-    }
-    return 0;
+  _getCurrentTime() {
+    return (this.player && typeof this.player.getCurrentTime === 'function') ? Math.floor(this.player.getCurrentTime()) : 0;
   }
 
   setStartTimeFromCurrent() {
-    const current = this.getCurrentPlayerTime();
-    this.startTime = current;
-    const startInput = document.getElementById('yt-start-time-input');
-    if (startInput) startInput.value = this.formatSeconds(current);
-    this.updateDurationDisplay();
-    if (window.showToast) window.showToast(`تم تعيين وقت البداية: ${this.formatSeconds(current)}`, 'info');
+    this.startTime = this._getCurrentTime();
+    const el = document.getElementById('yt-start-time-input');
+    if (el) el.value = this._fmtSecs(this.startTime);
+    this._updateDuration();
+    if (window.showToast) window.showToast(`وقت البداية: ${this._fmtSecs(this.startTime)}`, 'info');
   }
 
   setEndTimeFromCurrent() {
-    const current = this.getCurrentPlayerTime();
-    this.endTime = current;
-    const endInput = document.getElementById('yt-end-time-input');
-    if (endInput) endInput.value = this.formatSeconds(current);
-    this.updateDurationDisplay();
-    if (window.showToast) window.showToast(`تم تعيين وقت النهاية: ${this.formatSeconds(current)}`, 'info');
+    this.endTime = this._getCurrentTime();
+    const el = document.getElementById('yt-end-time-input');
+    if (el) el.value = this._fmtSecs(this.endTime);
+    this._updateDuration();
+    if (window.showToast) window.showToast(`وقت النهاية: ${this._fmtSecs(this.endTime)}`, 'info');
   }
 
-  updateDurationDisplay() {
-    const durationEl = document.getElementById('yt-section-duration');
+  _updateDuration() {
     const diff = Math.max(0, this.endTime - this.startTime);
-    if (durationEl) {
-      durationEl.textContent = this.formatSeconds(diff);
-    }
-
-    // Update timestamp share link
-    const timeLink = document.getElementById('yt-timestamp-link');
-    if (timeLink && this.currentVideo) {
-      timeLink.href = `https://youtu.be/${this.currentVideo.id}?t=${this.startTime}`;
-      timeLink.textContent = `https://youtu.be/${this.currentVideo.id}?t=${this.startTime}`;
-    }
+    const el = document.getElementById('yt-section-duration');
+    if (el) el.textContent = this._fmtSecs(diff);
+    const link = document.getElementById('yt-timestamp-link');
+    if (link && this.currentVideo) { link.href = `https://youtu.be/${this.currentVideo.id}?t=${this.startTime}`; link.textContent = `https://youtu.be/${this.currentVideo.id}?t=${this.startTime}`; }
   }
 
   previewSection() {
-    if (this.startTime >= this.endTime) {
-      if (window.showToast) window.showToast('يرجى تحديد وقت بداية أقل من وقت النهاية', 'warning');
-      return;
-    }
-
-    if (this.player && typeof this.player.seekTo === 'function') {
+    if (this.startTime >= this.endTime) { if (window.showToast) window.showToast('حدد وقت بداية أقل من وقت النهاية', 'warning'); return; }
+    if (this.player?.seekTo) {
       this.player.seekTo(this.startTime, true);
       this.player.playVideo();
-
       if (this.previewInterval) clearInterval(this.previewInterval);
-      this.previewInterval = setInterval(() => {
-        const current = this.getCurrentPlayerTime();
-        if (current >= this.endTime) {
-          this.player.pauseVideo();
-          clearInterval(this.previewInterval);
-        }
-      }, 500);
-
-      if (window.showToast) window.showToast('جاري معاينة الجزء المحدد...', 'info');
+      this.previewInterval = setInterval(() => { if (this._getCurrentTime() >= this.endTime) { this.player.pauseVideo(); clearInterval(this.previewInterval); } }, 500);
     }
   }
 
   resetSection() {
-    this.startTime = 0;
-    this.endTime = 0;
-    const startInput = document.getElementById('yt-start-time-input');
-    const endInput = document.getElementById('yt-end-time-input');
-    if (startInput) startInput.value = '00:00:00';
-    if (endInput) endInput.value = '00:00:00';
-    this.updateDurationDisplay();
+    this.startTime = 0; this.endTime = 0;
+    const s = document.getElementById('yt-start-time-input');
+    const e = document.getElementById('yt-end-time-input');
+    if (s) s.value = '00:00:00'; if (e) e.value = '00:00:00';
+    this._updateDuration();
   }
 
-  parseTimestampToSeconds(tsStr) {
-    if (!tsStr) return 0;
-    const parts = tsStr.split(':').map(Number);
-    if (parts.length === 3) {
-      return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
-    } else if (parts.length === 2) {
-      return (parts[0] * 60) + parts[1];
-    }
-    return parseInt(tsStr, 10) || 0;
+  _parseTs(ts) {
+    if (!ts) return 0;
+    const p = ts.split(':').map(Number);
+    return p.length === 3 ? p[0]*3600+p[1]*60+p[2] : p.length === 2 ? p[0]*60+p[1] : parseInt(ts)||0;
   }
 
-  formatSeconds(secs) {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-
-    const pad = (num) => String(num).padStart(2, '0');
-    if (h > 0) {
-      return `${pad(h)}:${pad(m)}:${pad(s)}`;
-    }
-    return `${pad(m)}:${pad(s)}`;
+  _fmtSecs(s) {
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+    const p = n => String(n).padStart(2,'0');
+    return h > 0 ? `${p(h)}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
   }
 
-  escapeHTML(str) {
-    return String(str).replace(/[&<>'"]/g, 
-      tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-    );
-  }
+  esc(str) { return String(str||'').replace(/[&<>'"]/g, t=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[t]||t)); }
+  escapeHTML(str) { return this.esc(str); }
+  formatSeconds(s) { return this._fmtSecs(s); }
 }
 
 window.youtubeTool = new YouTubeTool();
